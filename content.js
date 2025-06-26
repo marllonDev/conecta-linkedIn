@@ -13,13 +13,12 @@ class ConnectaLinkedInContent {
         this.selectors = {
             searchBox: 'input[placeholder*="Pesquisar"], input[aria-label*="Pesquisar"]',
             searchButton: 'button[aria-label*="Pesquisar"], button[type="submit"]',
-            connectButton: 'button[aria-label*="Conectar"], button[data-control-name*="connect"]',
+            connectButton: 'button:has(span[aria-hidden="true"][class="artdeco-button__text"])',
             sendButton: 'button[aria-label*="Enviar"], button[data-control-name*="send"]',
-            noteButton: 'button[aria-label*="Adicionar nota"], button[aria-label*="Add a note"]',
             noteTextarea: 'textarea[name="message"], textarea[aria-label*="mensagem"]',
-            profileName: 'h1, .text-heading-xlarge, .pv-text-details__left-panel h1',
-            profileTitle: '.text-body-medium, .pv-text-details__left-panel .text-body-medium',
-            searchResults: '[data-chameleon-result-urn], .reusable-search__result-container',
+            profileName: ".entity-result__title-text a span[aria-hidden=\"true\"]",
+            profileTitle: ".entity-result__primary-subtitle",
+            searchResults: "li.reusable-search__result-container",
             nextButton: 'button[aria-label*="Próxima"], button[aria-label*="Next"]',
             peopleFilter: 'button[aria-label*="Pessoas"], button[aria-label*="People"]',
             dismissButton: 'button[aria-label*="Dispensar"], button[aria-label*="Dismiss"]'
