@@ -18,7 +18,7 @@ class ConnectaLinkedInContent {
             noteTextarea: 'textarea[name="message"], textarea[aria-label*="mensagem"]',
             profileName: ".entity-result__title-text a span[aria-hidden=\"true\"]",
             profileTitle: ".entity-result__primary-subtitle",
-            searchResults: "ul.reusable-search__entity-result-list > li",
+            searchResults: "li.reusable-search__result-container",
             nextButton: 'button[aria-label*="Próxima"], button[aria-label*="Next"]',
             peopleFilter: 'button[aria-label*="Pessoas"], button[aria-label*="People"]',
             dismissButton: 'button[aria-label*="Dispensar"], button[aria-label*="Dismiss"]'
@@ -35,7 +35,6 @@ class ConnectaLinkedInContent {
 
     init() {
         this.setupMessageListeners();
-        this.injectStyles();
         this.loadProcessedProfiles();
         
         // Notificar que o content script está pronto
