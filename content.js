@@ -18,7 +18,7 @@ class ConnectaLinkedInContent {
             noteTextarea: 'textarea[name="message"], textarea[aria-label*="mensagem"]',
             profileName: ".entity-result__title-text a span[aria-hidden=\"true\"]",
             profileTitle: ".entity-result__primary-subtitle",
-            searchResults: "li.reusable-search__result-container",
+            searchResults: "ul.reusable-search__entity-result-list > li",
             nextButton: 'button[aria-label*="Próxima"], button[aria-label*="Next"]',
             peopleFilter: 'button[aria-label*="Pessoas"], button[aria-label*="People"]',
             dismissButton: 'button[aria-label*="Dispensar"], button[aria-label*="Dismiss"]'
