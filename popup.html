@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conecta-LinkedIn</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1>🔗 Conecta-LinkedIn</h1>
+                <span class="version">v1.0.0</span>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Inativo</span>
+            </div>
+        </header>
+
+        <div class="disclaimer">
+            <p><strong>⚠️ Aviso:</strong> Use com responsabilidade. Esta extensão deve ser usada respeitando os Termos de Uso do LinkedIn.</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" data-tab="config">Configuração</button>
+            <button class="tab-button" data-tab="stats">Estatísticas</button>
+            <button class="tab-button" data-tab="settings">Avançado</button>
+        </div>
+
+        <!-- Aba de Configuração -->
+        <div class="tab-content active" id="config">
+            <div class="form-group">
+                <label for="searchTerm">Cargo/Função para buscar:</label>
+                <input type="text" id="searchTerm" placeholder="Ex: Recrutador, Engenheiro de Dados" />
+                <small>Dica: Use termos específicos para melhores resultados</small>
+            </div>
+
+            <div class="form-group">
+                <label for="connectionMessage">Mensagem personalizada:</label>
+                <textarea id="connectionMessage" rows="4" placeholder="Olá [NOME], gostaria de me conectar com você..."></textarea>
+                <small>Use [NOME] para personalizar automaticamente</small>
+                <div class="message-preview" id="messagePreview"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="connectionLimit">Limite de conexões:</label>
+                    <input type="number" id="connectionLimit" min="1" max="50" value="10" />
+                </div>
+                <div class="form-group">
+                    <label for="timingStrategy">Estratégia de timing:</label>
+                    <select id="timingStrategy">
+                        <option value="conservative">Conservador (3-8s)</option>
+                        <option value="moderate" selected>Moderado (2-5s)</option>
+                        <option value="aggressive">Agressivo (1-3s)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="testMode" />
+                    Modo de teste (simular sem enviar)
+                </label>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">0 de 0 conexões enviadas</div>
+                <div class="current-action" id="currentAction">Aguardando...</div>
+            </div>
+
+            <div class="button-group">
+                <button id="startBtn" class="btn btn-primary">
+                    <span class="btn-icon">▶️</span>
+                    Iniciar Automação
+                </button>
+                <button id="stopBtn" class="btn btn-secondary" style="display: none;">
+                    <span class="btn-icon">⏹️</span>
+                    Parar
+                </button>
+            </div>
+        </div>
+
+        <!-- Aba de Estatísticas -->
+        <div class="tab-content" id="stats">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalSent">0</div>
+                    <div class="stat-label">Total Enviados</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="todaySent">0</div>
+                    <div class="stat-label">Hoje</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="successRate">0%</div>
+                    <div class="stat-label">Taxa de Sucesso</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="lastSession">0</div>
+                    <div class="stat-label">Última Sessão</div>
+                </div>
+            </div>
+
+            <div class="recent-activity">
+                <h3>Atividade Recente</h3>
+                <div class="activity-list" id="activityList">
+                    <div class="activity-item">
+                        <span class="activity-time">Nenhuma atividade ainda</span>
+                    </div>
+                </div>
+            </div>
+
+            <button id="exportBtn" class="btn btn-outline">
+                <span class="btn-icon">📊</span>
+                Exportar Dados
+            </button>
+        </div>
+
+        <!-- Aba de Configurações Avançadas -->
+        <div class="tab-content" id="settings">
+            <div class="form-group">
+                <label for="dailyLimit">Limite diário de conexões:</label>
+                <input type="number" id="dailyLimit" min="1" max="100" value="30" />
+                <small>Recomendado: máximo 30 por dia</small>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enableLogging" checked />
+                    Habilitar logs detalhados
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="smartPauses" checked />
+                    Pausas inteligentes (detecta atividade da página)
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="avoidDuplicates" checked />
+                    Evitar perfis já contatados
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="customSelectors">Seletores CSS personalizados:</label>
+                <textarea id="customSelectors" rows="3" placeholder='{"connectButton": "button[aria-label*=\'Conectar\']"}'></textarea>
+                <small>Para usuários avançados - formato JSON</small>
+            </div>
+
+            <div class="button-group">
+                <button id="resetBtn" class="btn btn-outline">
+                    <span class="btn-icon">🔄</span>
+                    Resetar Configurações
+                </button>
+                <button id="clearDataBtn" class="btn btn-outline">
+                    <span class="btn-icon">🗑️</span>
+                    Limpar Dados
+                </button>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="footer-links">
+                <a href="#" id="helpLink">Ajuda</a>
+                <a href="#" id="feedbackLink">Feedback</a>
+                <span class="footer-text">Desenvolvido com ❤️</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
+
