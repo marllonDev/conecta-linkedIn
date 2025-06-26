@@ -13,12 +13,12 @@ class ConnectaLinkedInContent {
         this.selectors = {
             searchBox: 'input[placeholder*="Pesquisar"], input[aria-label*="Pesquisar"]',
             searchButton: 'button[aria-label*="Pesquisar"], button[type="submit"]',
-            connectButton: 'button:has(span[aria-hidden="true"][class="artdeco-button__text"])',
+            connectButton: 'button[aria-label*="Connect"], button[aria-label*="Conectar"]',
             sendButton: 'button[aria-label*="Enviar"], button[data-control-name*="send"]',
             noteTextarea: 'textarea[name="message"], textarea[aria-label*="mensagem"]',
             profileName: ".entity-result__title-text a span[aria-hidden=\"true\"]",
             profileTitle: ".entity-result__primary-subtitle",
-            searchResults: "li.reusable-search__result-container",
+            searchResults: ".search-results-container li",
             nextButton: 'button[aria-label*="Próxima"], button[aria-label*="Next"]',
             peopleFilter: 'button[aria-label*="Pessoas"], button[aria-label*="People"]',
             dismissButton: 'button[aria-label*="Dispensar"], button[aria-label*="Dismiss"]'
@@ -406,6 +406,29 @@ class ConnectaLinkedInContent {
                 return;
             }
 
+            // Verificar se document.body existe antes de usar MutationObserver
+            if (!document.body) {
+                // Aguardar document.body estar disponível
+                const bodyObserver = new MutationObserver(() => {
+                    if (document.body) {
+                        bodyObserver.disconnect();
+                        // Agora procurar pelo elemento
+                        this.waitForElement(selector, timeout).then(resolve).catch(reject);
+                    }
+                });
+                
+                bodyObserver.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+                
+                setTimeout(() => {
+                    bodyObserver.disconnect();
+                    reject(new Error(`Document.body não encontrado após ${timeout}ms`));
+                }, timeout);
+                return;
+            }
+
             const observer = new MutationObserver(() => {
                 const element = document.querySelector(selector);
                 if (element) {
@@ -535,8 +558,17 @@ class ConnectaLinkedInContent {
     }
 }
 
-// Inicializar o content script apenas uma vez
-if (!window.conectaLinkedInContent) {
-    window.conectaLinkedInContent = new ConnectaLinkedInContent();
+// Aguardar o DOM estar pronto antes de inicializar
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!window.conectaLinkedInContent) {
+            window.conectaLinkedInContent = new ConnectaLinkedInContent();
+        }
+    });
+} else {
+    // DOM já está pronto
+    if (!window.conectaLinkedInContent) {
+        window.conectaLinkedInContent = new ConnectaLinkedInContent();
+    }
 }
 
