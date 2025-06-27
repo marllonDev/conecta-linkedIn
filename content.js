@@ -1,12 +1,14 @@
-// Conecta-LinkedIn Content Script
+// Conecta-LinkedIn Content Script - Versão Corrigida
 (function() {
     'use strict';
     
-    // Verificar se já foi inicializado para evitar declaração duplicada
-    if (window.conectaLinkedInContent) {
-        console.log('ConnectaLinkedInContent já foi inicializado');
+    // Verificar se já foi inicializado
+    if (window.conectaLinkedInInitialized) {
+        console.log('[ConnectaLinkedIn] Já inicializado, ignorando...');
         return;
     }
+    
+    window.conectaLinkedInInitialized = true;
 
     class ConnectaLinkedInContent {
         constructor() {
@@ -18,19 +20,40 @@
             this.retryCount = 0;
             this.maxRetries = 3;
             
-            // Seletores CSS para diferentes elementos do LinkedIn
+            // Seletores CSS baseados na inspeção real da página
             this.selectors = {
-                searchBox: 'input[placeholder*="Pesquisar"], input[aria-label*="Pesquisar"]',
-                searchButton: 'button[aria-label*="Pesquisar"], button[type="submit"]',
-                connectButton: 'button[aria-label*="Connect"], button[aria-label*="Conectar"]',
-                sendButton: 'button[aria-label*="Enviar"], button[data-control-name*="send"]',
-                noteTextarea: 'textarea[name="message"], textarea[aria-label*="mensagem"]',
-                profileName: ".entity-result__title-text a span[aria-hidden=\"true\"]",
-                profileTitle: ".entity-result__primary-subtitle",
-                searchResults: ".search-results-container li",
-                nextButton: 'button[aria-label*="Próxima"], button[aria-label*="Next"]',
-                peopleFilter: 'button[aria-label*="Pessoas"], button[aria-label*="People"]',
-                dismissButton: 'button[aria-label*="Dispensar"], button[aria-label*="Dismiss"]'
+                // Seletores principais (baseados na inspeção)
+                searchResults: "div[data-chameleon-result-urn]",
+                profileName: "a[href*=\"/in/\"] span[aria-hidden=\"true\"]",
+                profileTitle: ".t-14.t-black--light.t-normal",
+                connectButton: "button[aria-label*=\"Invite\"][aria-label*=\"to connect\"]",
+                sendButton: "button[aria-label*=\"Send\"], button[data-control-name*=\"send\"]",
+                noteTextarea: "textarea[name=\"message\"], textarea[aria-label*=\"message\"]",
+                searchBox: "input[placeholder*=\"Search\"]",
+                searchButton: "button[type=\"submit\"]",
+                peopleFilter: "button:contains(\"People\")",
+                dismissButton: "button[aria-label*=\"Dismiss\"]",
+                nextButton: "button[aria-label*=\"Next\"]",
+                profileLink: "a[href*=\"/in/\"]",
+                
+                // Seletores alternativos para fallback
+                alternativeSearchResults: [
+                    "div[data-chameleon-result-urn]",
+                    "li.GnKqjMvvMlITuGwjOvqTOMlFIUdVzAbE",
+                    ".search-results-container ul li",
+                    "ul[role=\"list\"] li"
+                ],
+                alternativeProfileName: [
+                    "a[href*=\"/in/\"] span[aria-hidden=\"true\"]",
+                    "span[dir=\"ltr\"] span[aria-hidden=\"true\"]",
+                    "a[href*=\"/in/\"]"
+                ],
+                alternativeConnectButton: [
+                    "button[aria-label*=\"Invite\"][aria-label*=\"to connect\"]",
+                    "button:contains(\"Connect\")",
+                    "button[aria-label*=\"Connect\"]",
+                    "button[data-control-name*=\"connect\"]"
+                ]
             };
 
             this.timingStrategies = {
@@ -43,22 +66,29 @@
         }
 
         init() {
+            console.log('[ConnectaLinkedIn] Inicializando content script...');
             this.setupMessageListeners();
             this.loadProcessedProfiles();
             
             // Notificar que o content script está pronto
-            chrome.runtime.sendMessage({ action: 'contentScriptReady' });
+            try {
+                chrome.runtime.sendMessage({ action: 'contentScriptReady' });
+            } catch (error) {
+                console.warn('[ConnectaLinkedIn] Erro ao enviar mensagem de inicialização:', error);
+            }
         }
 
         setupMessageListeners() {
             chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 this.handleMessage(message, sender, sendResponse);
-                return true;
+                return true; // Manter o canal aberto para resposta assíncrona
             });
         }
 
         async handleMessage(message, sender, sendResponse) {
             try {
+                console.log('[ConnectaLinkedIn] Mensagem recebida:', message.action);
+                
                 switch (message.action) {
                     case 'startAutomation':
                         await this.startAutomation(message.config);
@@ -74,7 +104,7 @@
                         sendResponse({ success: false, error: 'Ação desconhecida' });
                 }
             } catch (error) {
-                console.error('Erro no content script:', error);
+                console.error('[ConnectaLinkedIn] Erro no content script:', error);
                 sendResponse({ success: false, error: error.message });
             }
         }
@@ -89,7 +119,7 @@
             this.currentIndex = 0;
             this.retryCount = 0;
 
-            // Mesclar seletores personalizados
+            // Mesclar seletores personalizados se fornecidos
             if (config.customSelectors) {
                 this.selectors = { ...this.selectors, ...config.customSelectors };
             }
@@ -132,10 +162,7 @@
                 }
 
                 // Aguardar a página carregar
-                await this.waitForElement(this.selectors.searchResults, 10000);
-
-                // Aplicar filtro de pessoas se necessário
-                await this.applyPeopleFilter();
+                await this.waitForPageLoad();
 
                 // Coletar resultados da busca
                 await this.collectSearchResults();
@@ -148,58 +175,48 @@
             }
         }
 
-        async applyPeopleFilter() {
-            try {
-                const peopleFilter = document.querySelector(this.selectors.peopleFilter);
-                if (peopleFilter && !peopleFilter.classList.contains('active')) {
-                    await this.clickElement(peopleFilter);
-                    await this.randomDelay();
+        async waitForPageLoad() {
+            // Aguardar elementos principais estarem disponíveis
+            const maxWait = 10000;
+            const startTime = Date.now();
+            
+            while (Date.now() - startTime < maxWait) {
+                // Tentar encontrar resultados com qualquer um dos seletores
+                for (const selector of this.selectors.alternativeSearchResults) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        console.log(`[ConnectaLinkedIn] Encontrados ${elements.length} elementos com seletor: ${selector}`);
+                        this.selectors.searchResults = selector; // Atualizar seletor principal
+                        return;
+                    }
                 }
-            } catch (error) {
-                console.warn('Não foi possível aplicar filtro de pessoas:', error);
+                
+                await this.delay(500);
             }
+            
+            throw new Error('Página não carregou completamente ou não há resultados');
         }
 
         async collectSearchResults() {
             this.searchResults = [];
             
-            // Debug: verificar se encontra elementos
-            console.log('Procurando por elementos com seletor:', this.selectors.searchResults);
+            console.log(`[ConnectaLinkedIn] Coletando resultados com seletor: ${this.selectors.searchResults}`);
             const resultElements = document.querySelectorAll(this.selectors.searchResults);
-            console.log('Elementos encontrados:', resultElements.length);
+            console.log(`[ConnectaLinkedIn] Elementos encontrados: ${resultElements.length}`);
             
-            // Se não encontrar com o seletor principal, tentar alternativas
             if (resultElements.length === 0) {
-                const alternativeSelectors = [
-                    'li[data-chameleon-result-urn]',
-                    '.search-results-container > ul > li',
-                    '.search-results-container li',
-                    'div[data-chameleon-result-urn]',
-                    '.entity-result'
-                ];
-                
-                for (const altSelector of alternativeSelectors) {
-                    const altElements = document.querySelectorAll(altSelector);
-                    console.log(`Seletor alternativo ${altSelector}: ${altElements.length} elementos`);
-                    if (altElements.length > 0) {
-                        this.selectors.searchResults = altSelector;
-                        break;
-                    }
-                }
+                throw new Error('Nenhum resultado de busca encontrado na página');
             }
             
-            // Tentar novamente com o seletor atualizado
-            const finalElements = document.querySelectorAll(this.selectors.searchResults);
-            console.log('Elementos finais encontrados:', finalElements.length);
-            
-            for (const element of finalElements) {
+            for (const element of resultElements) {
                 try {
                     const profileData = this.extractProfileData(element);
                     if (profileData && this.shouldProcessProfile(profileData)) {
                         this.searchResults.push(profileData);
+                        console.log(`[ConnectaLinkedIn] Perfil adicionado: ${profileData.name}`);
                     }
                 } catch (error) {
-                    console.warn('Erro ao extrair dados do perfil:', error);
+                    console.warn('[ConnectaLinkedIn] Erro ao extrair dados do perfil:', error);
                 }
             }
 
@@ -212,70 +229,72 @@
 
         extractProfileData(element) {
             try {
-                // Tentar múltiplos seletores para o nome
-                const nameSelectors = [
-                    '.entity-result__title-text a span[aria-hidden="true"]',
-                    '.entity-result__title-text a',
-                    'a[href*="/in/"] span[aria-hidden="true"]',
-                    'a[href*="/in/"]',
-                    '.search-result__result-link',
-                    'h3 a span',
-                    'h3 a'
-                ];
+                console.log('[ConnectaLinkedIn] Extraindo dados do elemento:', element);
                 
+                // Procurar nome do perfil com seletores alternativos
                 let nameElement = null;
-                for (const selector of nameSelectors) {
+                let name = '';
+                
+                for (const selector of this.selectors.alternativeProfileName) {
                     nameElement = element.querySelector(selector);
-                    if (nameElement) break;
-                }
-                
-                // Tentar múltiplos seletores para o botão conectar
-                const connectSelectors = [
-                    'button[aria-label*="Connect"]',
-                    'button[aria-label*="Conectar"]',
-                    'button:contains("Connect")',
-                    'button:contains("Conectar")',
-                    'button[data-control-name*="connect"]'
-                ];
-                
-                let connectButton = null;
-                for (const selector of connectSelectors) {
-                    connectButton = element.querySelector(selector);
-                    if (connectButton) break;
-                }
-                
-                // Se não encontrou com seletores, procurar por texto
-                if (!connectButton) {
-                    const buttons = element.querySelectorAll('button');
-                    for (const btn of buttons) {
-                        const text = btn.textContent.trim().toLowerCase();
-                        const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-                        if (text.includes('connect') || text.includes('conectar') || 
-                            ariaLabel.includes('connect') || ariaLabel.includes('conectar')) {
-                            connectButton = btn;
+                    if (nameElement) {
+                        name = nameElement.textContent.trim();
+                        // Filtrar nomes válidos (não deve ser "Status is offline" etc.)
+                        if (name && !name.includes('Status is') && !name.includes('View') && name.length > 2) {
+                            console.log(`[ConnectaLinkedIn] Nome encontrado com ${selector}: "${name}"`);
                             break;
                         }
                     }
                 }
                 
-                const titleElement = element.querySelector(this.selectors.profileTitle) ||
-                                   element.querySelector('.entity-result__primary-subtitle');
+                // Procurar botão Connect com seletores alternativos
+                let connectButton = null;
                 
+                for (const selector of this.selectors.alternativeConnectButton) {
+                    if (selector.includes(':contains')) {
+                        // Para seletores :contains, procurar manualmente
+                        const buttons = element.querySelectorAll('button');
+                        for (const btn of buttons) {
+                            const text = btn.textContent.trim().toLowerCase();
+                            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                            if (text.includes('connect') || ariaLabel.includes('connect') || ariaLabel.includes('invite')) {
+                                connectButton = btn;
+                                console.log(`[ConnectaLinkedIn] Botão Connect encontrado: "${btn.textContent.trim()}" | aria-label: "${btn.getAttribute('aria-label')}"`);
+                                break;
+                            }
+                        }
+                    } else {
+                        connectButton = element.querySelector(selector);
+                    }
+                    
+                    if (connectButton) {
+                        console.log(`[ConnectaLinkedIn] Botão Connect encontrado com ${selector}`);
+                        break;
+                    }
+                }
+                
+                // Procurar título/cargo
+                const titleElement = element.querySelector(this.selectors.profileTitle) ||
+                                   element.querySelector('.t-14') ||
+                                   element.querySelector('[data-anonymize="job-title"]');
+                
+                const title = titleElement ? titleElement.textContent.trim() : '';
+                
+                // Procurar link do perfil
                 const profileLink = element.querySelector('a[href*="/in/"]');
+                const profileUrl = profileLink ? profileLink.href : '';
 
-                console.log('Dados extraídos:', {
-                    nameElement: nameElement ? nameElement.textContent.trim() : 'não encontrado',
-                    connectButton: connectButton ? 'encontrado' : 'não encontrado',
-                    profileLink: profileLink ? profileLink.href : 'não encontrado'
+                console.log('[ConnectaLinkedIn] Dados extraídos:', {
+                    name: name || 'NÃO ENCONTRADO',
+                    title: title || 'NÃO ENCONTRADO',
+                    connectButton: connectButton ? 'ENCONTRADO' : 'NÃO ENCONTRADO',
+                    profileUrl: profileUrl || 'NÃO ENCONTRADO'
                 });
 
-                if (!nameElement || !connectButton) {
+                if (!name || !connectButton) {
+                    console.warn('[ConnectaLinkedIn] Perfil ignorado - dados insuficientes');
                     return null;
                 }
-
-                const name = nameElement.textContent.trim();
-                const title = titleElement ? titleElement.textContent.trim() : '';
-                const profileUrl = profileLink ? profileLink.href : '';
 
                 return {
                     name,
@@ -285,7 +304,7 @@
                     connectButton
                 };
             } catch (error) {
-                console.warn('Erro ao extrair dados do perfil:', error);
+                console.error('[ConnectaLinkedIn] Erro ao extrair dados do perfil:', error);
                 return null;
             }
         }
@@ -293,19 +312,23 @@
         shouldProcessProfile(profileData) {
             // Verificar se já foi processado
             if (this.config.avoidDuplicates && this.processedProfiles.has(profileData.profileUrl)) {
+                console.log(`[ConnectaLinkedIn] Perfil ${profileData.name} já foi processado`);
                 return false;
             }
 
             // Verificar se o botão de conectar está disponível
             if (!profileData.connectButton || profileData.connectButton.disabled) {
+                console.log(`[ConnectaLinkedIn] Botão Connect não disponível para ${profileData.name}`);
                 return false;
             }
 
             // Verificar se não é um perfil premium ou patrocinado
             const isPremium = profileData.element.querySelector('[data-test-icon="premium-icon"]');
-            const isSponsored = profileData.element.textContent.includes('Patrocinado');
+            const isSponsored = profileData.element.textContent.includes('Patrocinado') || 
+                              profileData.element.textContent.includes('Sponsored');
             
             if (isPremium || isSponsored) {
+                console.log(`[ConnectaLinkedIn] Perfil ${profileData.name} é premium/patrocinado - ignorando`);
                 return false;
             }
 
@@ -313,7 +336,9 @@
         }
 
         async processProfiles() {
-            for (let i = 0; i < Math.min(this.searchResults.length, this.config.connectionLimit); i++) {
+            const totalToProcess = Math.min(this.searchResults.length, this.config.connectionLimit);
+            
+            for (let i = 0; i < totalToProcess; i++) {
                 if (!this.isRunning) break;
 
                 const profile = this.searchResults[i];
@@ -323,11 +348,11 @@
                     await this.sendConnectionRequest(profile);
                     
                     // Atualizar progresso
-                    chrome.runtime.sendMessage({
+                    this.sendMessage({
                         action: 'updateProgress',
                         progress: {
                             current: this.currentIndex,
-                            total: Math.min(this.searchResults.length, this.config.connectionLimit),
+                            total: totalToProcess,
                             currentAction: `Processando ${profile.name}`
                         }
                     });
@@ -340,7 +365,7 @@
                     await this.smartDelay();
 
                 } catch (error) {
-                    console.error(`Erro ao processar perfil ${profile.name}:`, error);
+                    console.error(`[ConnectaLinkedIn] Erro ao processar perfil ${profile.name}:`, error);
                     this.logActivity(`Erro ao conectar com ${profile.name}: ${error.message}`);
                     
                     // Continuar com o próximo perfil
@@ -349,7 +374,7 @@
             }
 
             // Automação concluída
-            chrome.runtime.sendMessage({
+            this.sendMessage({
                 action: 'automationComplete',
                 data: {
                     message: `Automação concluída! ${this.currentIndex} conexões processadas.`
@@ -363,53 +388,29 @@
             try {
                 // Scroll para o elemento se necessário
                 profile.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.randomDelay(500, 1000);
+                await this.delay(500);
 
                 // Clicar no botão conectar
-                await this.clickElement(profile.connectButton);
-                await this.randomDelay(1000, 2000);
+                if (!this.config.testMode) {
+                    await this.clickElement(profile.connectButton);
+                    await this.delay(1000);
 
-                // Verificar se apareceu modal de nota
-                const noteButton = document.querySelector(this.selectors.noteButton);
-                if (noteButton) {
-                    await this.clickElement(noteButton);
-                    await this.randomDelay(500, 1000);
-
-                    // Preencher mensagem personalizada
-                    const noteTextarea = document.querySelector(this.selectors.noteTextarea);
-                    if (noteTextarea) {
-                        const personalizedMessage = this.personalizeMessage(this.config.connectionMessage, profile.name);
-                        await this.typeText(noteTextarea, personalizedMessage);
-                        await this.randomDelay(500, 1000);
-                    }
+                    // Verificar se apareceu modal de nota
+                    await this.handleConnectionModal(profile);
                 }
 
-                // Clicar em enviar
-                const sendButton = document.querySelector(this.selectors.sendButton);
-                if (sendButton) {
-                    if (!this.config.testMode) {
-                        await this.clickElement(sendButton);
-                        await this.randomDelay(1000, 2000);
+                // Notificar sucesso
+                this.sendMessage({
+                    action: 'connectionSent',
+                    data: {
+                        name: profile.name,
+                        title: profile.title,
+                        profileUrl: profile.profileUrl,
+                        testMode: this.config.testMode
                     }
+                });
 
-                    // Notificar sucesso
-                    chrome.runtime.sendMessage({
-                        action: 'connectionSent',
-                        data: {
-                            name: profile.name,
-                            title: profile.title,
-                            profileUrl: profile.profileUrl,
-                            testMode: this.config.testMode
-                        }
-                    });
-
-                    this.logActivity(`${this.config.testMode ? '[TESTE] ' : ''}Convite enviado para ${profile.name}`);
-                } else {
-                    throw new Error('Botão de enviar não encontrado');
-                }
-
-                // Fechar qualquer modal que possa ter ficado aberto
-                await this.dismissModals();
+                this.logActivity(`${this.config.testMode ? '[TESTE] ' : ''}Convite enviado para ${profile.name}`);
 
             } catch (error) {
                 // Tentar fechar modais em caso de erro
@@ -418,17 +419,55 @@
             }
         }
 
+        async handleConnectionModal(profile) {
+            // Aguardar modal aparecer
+            await this.delay(1000);
+            
+            // Procurar por textarea de mensagem
+            const noteTextarea = document.querySelector(this.selectors.noteTextarea);
+            if (noteTextarea && this.config.connectionMessage) {
+                const personalizedMessage = this.personalizeMessage(this.config.connectionMessage, profile.name);
+                await this.typeText(noteTextarea, personalizedMessage);
+                await this.delay(500);
+            }
+
+            // Procurar botão de enviar
+            const sendButton = document.querySelector(this.selectors.sendButton) ||
+                              document.querySelector('button[aria-label*="Send"]') ||
+                              document.querySelector('button:contains("Send")');
+            
+            if (sendButton) {
+                await this.clickElement(sendButton);
+                await this.delay(1000);
+            } else {
+                console.warn('[ConnectaLinkedIn] Botão Send não encontrado');
+            }
+
+            // Fechar qualquer modal que possa ter ficado aberto
+            await this.dismissModals();
+        }
+
         personalizeMessage(message, name) {
-            return message.replace(/\[NOME\]/g, name.split(' ')[0]);
+            const firstName = name.split(' ')[0];
+            return message.replace(/\[NOME\]/g, firstName);
         }
 
         async dismissModals() {
             try {
-                const dismissButtons = document.querySelectorAll(this.selectors.dismissButton);
-                for (const button of dismissButtons) {
-                    if (button.offsetParent !== null) { // Verificar se está visível
-                        await this.clickElement(button);
-                        await this.randomDelay(300, 500);
+                const dismissSelectors = [
+                    'button[aria-label*="Dismiss"]',
+                    'button[aria-label*="Close"]',
+                    'button[data-control-name*="overlay.close"]',
+                    '.artdeco-modal__dismiss'
+                ];
+                
+                for (const selector of dismissSelectors) {
+                    const buttons = document.querySelectorAll(selector);
+                    for (const button of buttons) {
+                        if (button.offsetParent !== null) { // Verificar se está visível
+                            await this.clickElement(button);
+                            await this.delay(300);
+                        }
                     }
                 }
             } catch (error) {
@@ -438,10 +477,12 @@
 
         async clickElement(element) {
             if (!element) {
-                throw new Error('Elemento não encontrado');
+                throw new Error('Elemento não encontrado para clique');
             }
 
-            // Simular movimento do mouse
+            console.log(`[ConnectaLinkedIn] Clicando em: ${element.tagName} - "${element.textContent.trim()}"`);
+
+            // Simular movimento do mouse se configurado
             if (this.config.smartPauses) {
                 const rect = element.getBoundingClientRect();
                 const event = new MouseEvent('mouseover', {
@@ -452,7 +493,7 @@
                     clientY: rect.top + rect.height / 2
                 });
                 element.dispatchEvent(event);
-                await this.randomDelay(100, 300);
+                await this.delay(100);
             }
 
             // Clicar no elemento
@@ -464,6 +505,8 @@
                 throw new Error('Campo de texto não encontrado');
             }
 
+            console.log(`[ConnectaLinkedIn] Digitando texto: "${text}"`);
+
             // Limpar campo
             element.value = '';
             element.focus();
@@ -474,97 +517,36 @@
                 element.dispatchEvent(new Event('input', { bubbles: true }));
                 
                 if (this.config.smartPauses) {
-                    await this.randomDelay(50, 150);
+                    await this.delay(50);
                 }
             }
 
             element.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        async waitForElement(selector, timeout = 5000) {
-            return new Promise((resolve, reject) => {
-                const element = document.querySelector(selector);
-                if (element) {
-                    resolve(element);
-                    return;
-                }
-
-                // Verificar se document.body existe antes de usar MutationObserver
-                if (!document.body) {
-                    // Aguardar document.body estar disponível
-                    const bodyObserver = new MutationObserver(() => {
-                        if (document.body) {
-                            bodyObserver.disconnect();
-                            // Agora procurar pelo elemento
-                            this.waitForElement(selector, timeout).then(resolve).catch(reject);
-                        }
-                    });
-                    
-                    bodyObserver.observe(document.documentElement, {
-                        childList: true,
-                        subtree: true
-                    });
-                    
-                    setTimeout(() => {
-                        bodyObserver.disconnect();
-                        reject(new Error(`Document.body não encontrado após ${timeout}ms`));
-                    }, timeout);
-                    return;
-                }
-
-                const observer = new MutationObserver(() => {
-                    const element = document.querySelector(selector);
-                    if (element) {
-                        observer.disconnect();
-                        resolve(element);
-                    }
-                });
-
-                observer.observe(document.body, {
-                    childList: true,
-                    subtree: true
-                });
-
-                setTimeout(() => {
-                    observer.disconnect();
-                    reject(new Error(`Elemento ${selector} não encontrado após ${timeout}ms`));
-                }, timeout);
-            });
-        }
-
-        async randomDelay(min = null, max = null) {
-            const strategy = this.timingStrategies[this.config.timingStrategy] || this.timingStrategies.moderate;
-            const minDelay = min || strategy.min;
-            const maxDelay = max || strategy.max;
-            
-            const delay = Math.random() * (maxDelay - minDelay) + minDelay;
-            return new Promise(resolve => setTimeout(resolve, delay));
+        async delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         async smartDelay() {
-            // Delay base baseado na estratégia
-            await this.randomDelay();
+            const strategy = this.timingStrategies[this.config.timingStrategy] || this.timingStrategies.moderate;
+            const delay = Math.random() * (strategy.max - strategy.min) + strategy.min;
+            
+            console.log(`[ConnectaLinkedIn] Aguardando ${Math.round(delay)}ms`);
+            await this.delay(delay);
 
             // Delay adicional se detectar atividade suspeita
             if (this.config.smartPauses) {
                 const isPageBusy = document.querySelector('.loading, .spinner, [aria-busy="true"]');
                 if (isPageBusy) {
-                    await this.randomDelay(2000, 5000);
-                }
-
-                // Verificar se há muitas requisições de rede
-                const performanceEntries = performance.getEntriesByType('navigation');
-                if (performanceEntries.length > 0) {
-                    const lastEntry = performanceEntries[performanceEntries.length - 1];
-                    if (lastEntry.loadEventEnd - lastEntry.loadEventStart > 3000) {
-                        await this.randomDelay(1000, 3000);
-                    }
+                    console.log('[ConnectaLinkedIn] Página ocupada, aguardando mais tempo...');
+                    await this.delay(2000);
                 }
             }
         }
 
         handleError(error) {
-            console.error('Erro na automação:', error);
+            console.error('[ConnectaLinkedIn] Erro na automação:', error);
             
             this.retryCount++;
             
@@ -581,7 +563,7 @@
                 this.logActivity(`Erro máximo de tentativas atingido: ${error.message}`);
                 this.stopAutomation();
                 
-                chrome.runtime.sendMessage({
+                this.sendMessage({
                     action: 'automationError',
                     data: {
                         message: `Erro na automação: ${error.message}`
@@ -593,7 +575,7 @@
         logActivity(message) {
             console.log(`[ConnectaLinkedIn] ${message}`);
             
-            chrome.runtime.sendMessage({
+            this.sendMessage({
                 action: 'logActivity',
                 data: {
                     message,
@@ -603,15 +585,24 @@
             });
         }
 
+        sendMessage(message) {
+            try {
+                chrome.runtime.sendMessage(message);
+            } catch (error) {
+                console.warn('[ConnectaLinkedIn] Erro ao enviar mensagem:', error);
+            }
+        }
+
         loadProcessedProfiles() {
             try {
                 const stored = localStorage.getItem('conecta-linkedin-processed');
                 if (stored) {
                     const data = JSON.parse(stored);
                     this.processedProfiles = new Set(data);
+                    console.log(`[ConnectaLinkedIn] Carregados ${data.length} perfis processados`);
                 }
             } catch (error) {
-                console.warn('Erro ao carregar perfis processados:', error);
+                console.warn('[ConnectaLinkedIn] Erro ao carregar perfis processados:', error);
             }
         }
 
@@ -620,20 +611,25 @@
                 const data = Array.from(this.processedProfiles);
                 localStorage.setItem('conecta-linkedin-processed', JSON.stringify(data));
             } catch (error) {
-                console.warn('Erro ao salvar perfis processados:', error);
+                console.warn('[ConnectaLinkedIn] Erro ao salvar perfis processados:', error);
             }
         }
     }
 
     // Aguardar o DOM estar pronto antes de inicializar
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
+    function initializeWhenReady() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                window.conectaLinkedInContent = new ConnectaLinkedInContent();
+            });
+        } else {
+            // DOM já está pronto
             window.conectaLinkedInContent = new ConnectaLinkedInContent();
-        });
-    } else {
-        // DOM já está pronto
-        window.conectaLinkedInContent = new ConnectaLinkedInContent();
+        }
     }
+
+    // Inicializar
+    initializeWhenReady();
 
 })();
 

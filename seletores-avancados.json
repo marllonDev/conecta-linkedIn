@@ -1,0 +1,55 @@
+{
+  "description": "Seletores CSS alternativos para a extensão Conecta-LinkedIn",
+  "version": "1.0",
+  "selectors": {
+    "searchResults": "div[data-chameleon-result-urn]",
+    "profileName": "a[href*=\"/in/\"] span[aria-hidden=\"true\"]",
+    "profileTitle": ".t-14.t-black--light.t-normal",
+    "connectButton": "button[aria-label*=\"Invite\"][aria-label*=\"to connect\"]",
+    "sendButton": "button[aria-label*=\"Send\"], button[data-control-name*=\"send\"]",
+    "noteTextarea": "textarea[name=\"message\"], textarea[aria-label*=\"message\"]",
+    "searchBox": "input[placeholder*=\"Search\"]",
+    "searchButton": "button[type=\"submit\"]",
+    "peopleFilter": "button:contains(\"People\")",
+    "dismissButton": "button[aria-label*=\"Dismiss\"]",
+    "nextButton": "button[aria-label*=\"Next\"]",
+    "profileLink": "a[href*=\"/in/\"]"
+  },
+  "alternativeSelectors": {
+    "searchResults": [
+      "div[data-chameleon-result-urn]",
+      "li.GnKqjMvvMlITuGwjOvqTOMlFIUdVzAbE",
+      ".search-results-container ul li",
+      "ul[role=\"list\"] li",
+      ".reusable-search__result-container",
+      ".entity-result"
+    ],
+    "profileName": [
+      "a[href*=\"/in/\"] span[aria-hidden=\"true\"]",
+      "span[dir=\"ltr\"] span[aria-hidden=\"true\"]",
+      "a[href*=\"/in/\"]",
+      ".entity-result__title-text a span",
+      "h3 a span",
+      "[data-anonymize=\"person-name\"]"
+    ],
+    "connectButton": [
+      "button[aria-label*=\"Invite\"][aria-label*=\"to connect\"]",
+      "button:contains(\"Connect\")",
+      "button[aria-label*=\"Connect\"]",
+      "button[data-control-name*=\"connect\"]",
+      "button[aria-label*=\"Conectar\"]"
+    ],
+    "profileTitle": [
+      ".t-14.t-black--light.t-normal",
+      ".entity-result__primary-subtitle",
+      ".t-14",
+      "[data-anonymize=\"job-title\"]",
+      ".subline-level-1"
+    ]
+  },
+  "usage": {
+    "instructions": "Cole este JSON na aba 'Avançado' da extensão para usar seletores alternativos",
+    "example": "Para usar seletores alternativos, cole o conteúdo deste arquivo no campo 'Seletores Personalizados' na aba Avançado"
+  }
+}
+
