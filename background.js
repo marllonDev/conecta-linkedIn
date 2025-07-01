@@ -91,7 +91,7 @@ class ConnectaLinkedInBackground {
                     break;
 
                 case 'logActivity':
-                    this.logActivity(message.activity);
+                    this.logActivity(message.data);
                     sendResponse({ success: true });
                     break;
 
